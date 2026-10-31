@@ -14,8 +14,7 @@ const seedEvents = [
     date: new Date('2026-11-15T09:00:00+06:00'),
     volunteersNeeded: 60,
     organizerEmail: 'shahriar.hassan@gmail.com',
-    imageUrl:
-      'https://images.unsplash.com/photo-1441974231531-c6227db76b6e?auto=format&fit=crop&w=1200&q=80',
+    imageUrl: 'https://images.unsplash.com/photo-1441974231531-c6227db76b6e?auto=format&fit=crop&w=1200&q=80',
   },
   {
     title: 'Winter Clothes Drive for Cold-Hit Families in Cox\u2019s Bazar',
@@ -26,8 +25,7 @@ const seedEvents = [
     date: new Date('2026-12-05T10:00:00+06:00'),
     volunteersNeeded: 40,
     organizerEmail: 'nusrat.jahan@yahoo.com',
-    imageUrl:
-      'https://images.unsplash.com/photo-1483985988355-763728e1935b?auto=format&fit=crop&w=1200&q=80',
+    imageUrl: 'https://images.unsplash.com/photo-1483985988355-763728e1935b?auto=format&fit=crop&w=1200&q=80',
   },
   {
     title: 'Inani Beach Cleanup & Plastic Audit',
@@ -38,8 +36,7 @@ const seedEvents = [
     date: new Date('2026-11-22T06:30:00+06:00'),
     volunteersNeeded: 80,
     organizerEmail: 'tanvir.ahmed@bracu.ac.bd',
-    imageUrl:
-      'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=1200&q=80',
+    imageUrl: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=1200&q=80',
   },
   {
     title: 'Flood Relief Distribution in Sunamganj Haor',
@@ -50,8 +47,7 @@ const seedEvents = [
     date: new Date('2026-11-08T08:00:00+06:00'),
     volunteersNeeded: 50,
     organizerEmail: 'rezaul.karim@gmail.com',
-    imageUrl:
-      'https://images.unsplash.com/photo-1500375592092-40eb2168fd21?auto=format&fit=crop&w=1200&q=80',
+    imageUrl: 'https://images.unsplash.com/photo-1500375592092-40eb2168fd21?auto=format&fit=crop&w=1200&q=80',
   },
   {
     title: 'Free Health Camp & Blood Donation Drive at BRAC University',
@@ -62,8 +58,7 @@ const seedEvents = [
     date: new Date('2026-11-01T09:00:00+06:00'),
     volunteersNeeded: 30,
     organizerEmail: 'farhana.islam@gmail.com',
-    imageUrl:
-      'https://images.unsplash.com/photo-1615461066841-6116e61058f6?auto=format&fit=crop&w=1200&q=80',
+    imageUrl: 'https://images.unsplash.com/photo-1615461066841-6116e61058f6?auto=format&fit=crop&w=1200&q=80',
   },
   {
     title: 'Community Kitchen & Food Distribution in Korail Slum',
@@ -74,8 +69,7 @@ const seedEvents = [
     date: new Date('2026-11-09T14:00:00+06:00'),
     volunteersNeeded: 25,
     organizerEmail: 'arif.mahmud@du.ac.bd',
-    imageUrl:
-      'https://images.unsplash.com/photo-1488459716781-31db52582fe9?auto=format&fit=crop&w=1200&q=80',
+    imageUrl: 'https://images.unsplash.com/photo-1488459716781-31db52582fe9?auto=format&fit=crop&w=1200&q=80',
   },
 ];
 
@@ -123,6 +117,22 @@ router.get('/user/:email', async (req, res) => {
   }
 });
 
+// GET /api/events/:id - fetch a single event by ID
+router.get('/:id', async (req, res) => {
+  try {
+    const event = await Event.findById(req.params.id);
+    if (!event) {
+      return res.status(404).json({ message: 'Event not found' });
+    }
+    res.status(200).json({ message: 'Event fetched successfully', event });
+  } catch (error) {
+    if (error.name === 'CastError') {
+      return res.status(400).json({ message: 'Invalid event ID' });
+    }
+    res.status(500).json({ message: 'Failed to fetch event', error: error.message });
+  }
+});
+
 // PUT /api/events/:id - update an existing event by ID
 router.put('/:id', async (req, res) => {
   try {
@@ -158,6 +168,57 @@ router.delete('/:id', async (req, res) => {
       return res.status(400).json({ message: 'Invalid event ID' });
     }
     res.status(500).json({ message: 'Failed to delete event', error: error.message });
+  }
+});
+
+// POST /api/events/seed - Add initial Bangladesh dummy events
+router.post('/seed', async (req, res) => {
+  try {
+    const sampleEvents = [
+      {
+        title: "Cox's Bazar Beach Plastic Clean-up Drive",
+        category: 'Cleanup',
+        location: "Laboni Beach, Cox's Bazar",
+        date: '2026-11-15',
+        volunteersNeeded: 35,
+        description:
+          "Join us in removing marine plastic debris and ocean waste from the world's longest natural sea beach.",
+        imageUrl: 'https://images.unsplash.com/photo-1618477461853-cf6ed80faba5?q=80&w=800',
+      },
+      {
+        title: 'Sylhet Green Canopy Plantation Drive',
+        category: 'Tree Plantation',
+        location: 'Jaflong Road, Sylhet',
+        date: '2026-11-20',
+        volunteersNeeded: 50,
+        description:
+          'A major reforestation effort focused on planting fruit-bearing and indigenous forest trees across Sylhet.',
+        imageUrl: 'https://images.unsplash.com/photo-1542601906990-b4d3fb778b09?q=80&w=800',
+      },
+      {
+        title: 'Moheshkhali Coastal Winter Relief',
+        category: 'Winter Clothes',
+        location: 'Gorakghata, Moheshkhali',
+        date: '2026-12-05',
+        volunteersNeeded: 20,
+        description: 'Distributing warm blankets and winter essentials to underprivileged coastal fishermen families.',
+        imageUrl: 'https://images.unsplash.com/photo-1488521787991-ed7bbaae773c?q=80&w=800',
+      },
+      {
+        title: 'DU Campus Voluntary Blood Drive',
+        category: 'Blood Drive',
+        location: 'TSC, University of Dhaka',
+        date: '2026-11-10',
+        volunteersNeeded: 40,
+        description: 'A day-long voluntary blood donation drive to restock emergency blood banks across Dhaka city.',
+        imageUrl: 'https://images.unsplash.com/photo-1615461066841-6116e61058f4?q=80&w=800',
+      },
+    ];
+
+    await Event.insertMany(sampleEvents);
+    res.status(201).json({ message: 'Sample events seeded successfully!' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
   }
 });
 
