@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import { connectDB } from './db.js';
+import eventRoutes from './routes/eventRoutes.js';
 
 dotenv.config();
 
@@ -14,6 +15,8 @@ app.use(express.json());
 app.get('/', (req, res) => {
   res.send({ status: 'ok', message: 'ServeTogether Server Running' });
 });
+
+app.use('/api/events', eventRoutes);
 
 async function startServer() {
   try {
