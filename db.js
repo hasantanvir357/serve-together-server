@@ -15,7 +15,7 @@ let db;
 export async function connectDB() {
   if (!db) {
     await client.connect();
-    db = client.db('serveTogetherDB'); // Database Name
+    db = client.db('serveTogetherDB'); 
     console.log('MongoDB Connected Successfully!');
   }
   return db;
