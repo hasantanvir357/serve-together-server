@@ -111,12 +111,13 @@ router.get('/joined', async (req, res) => {
   try {
     const { email } = req.query;
     let query = {};
+
     if (email) {
       query = { joinedUsers: email };
     } else {
-      // If no email query passed, fetch events that have at least 1 joined user or return all for testing
       query = { joinedUsers: { $exists: true, $not: { $size: 0 } } };
     }
+
     const events = await Event.find(query).sort({ date: 1 });
     res.status(200).json(events);
   } catch (error) {
