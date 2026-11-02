@@ -11,7 +11,6 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// CORS কনফিগারেশন: Credentials এবং Origin সুনির্দিষ্ট করা হলো
 app.use(
   cors({
     origin: ['http://localhost:3000', 'https://serve-together-client.vercel.app'],
