@@ -3,14 +3,23 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import { connectDB } from './db.js';
 import eventRoutes from './routes/eventRoutes.js';
-import authRoutes from './routes/auth.js'; // 1. Auth Routes ইম্পোর্ট করা হলো
+import authRoutes from './routes/auth.js';
 
 dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-app.use(cors());
+// CORS কনফিগারেশন: Credentials এবং Origin সুনির্দিষ্ট করা হলো
+app.use(
+  cors({
+    origin: ['http://localhost:3000', 'http://127.0.0.1:3000'],
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+  })
+);
+
 app.use(express.json());
 
 // Root Endpoint
@@ -20,7 +29,7 @@ app.get('/', (req, res) => {
 
 // API Routes
 app.use('/api/events', eventRoutes);
-app.use('/api/auth', authRoutes); // 2. Auth Routes এন্ডপয়েন্ট রেজিস্টার করা হলো
+app.use('/api/auth', authRoutes);
 
 async function startServer() {
   try {
