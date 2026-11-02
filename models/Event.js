@@ -43,6 +43,7 @@ const eventSchema = new mongoose.Schema(
       trim: true,
       default: '',
     },
+    joinedUsers: [{ type: String }],
   },
   { timestamps: true }
 );
