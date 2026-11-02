@@ -7,7 +7,6 @@ export async function connectDB() {
     await mongoose.connect(process.env.MONGODB_URI, {
       dbName: 'serveTogetherDB',
     });
-    console.log('MongoDB Connected Successfully!');
   }
   return mongoose.connection;
 }

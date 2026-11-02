@@ -1,18 +1,35 @@
 import jwt from 'jsonwebtoken';
 
-export const verifyJWT = (req, res, next) => {
-  const authHeader = req.headers.authorization;
-  const token = authHeader && authHeader.split(' ')[1];
+export const getJwtSecret = () => process.env.JWT_SECRET?.trim() || null;
 
-  if (!token) {
-    return res.status(401).json({ message: 'Unauthorized access. No token provided.' });
+export const verifyToken = (req, res, next) => {
+  const authHeader = req.get('authorization');
+  const bearerMatch = typeof authHeader === 'string' ? /^Bearer ([^\s]+)$/.exec(authHeader) : null;
+
+  if (!bearerMatch) {
+    return res.status(401).json({ message: 'Unauthorized access. A Bearer token is required.' });
+  }
+
+  const secret = getJwtSecret();
+  if (!secret) {
+    return res.status(500).json({ message: 'JWT authentication is not configured.' });
   }
 
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'servetogether_jwt_secret_2026');
-    req.user = decoded;
-    next();
-  } catch (error) {
+    const decoded = jwt.verify(bearerMatch[1], secret);
+
+    if (!decoded || typeof decoded !== 'object' || typeof decoded.email !== 'string' || !decoded.email.trim()) {
+      return res.status(403).json({ message: 'Forbidden. Token does not contain a valid user email.' });
+    }
+
+    req.user = {
+      ...decoded,
+      email: decoded.email.trim().toLowerCase(),
+    };
+    return next();
+  } catch {
     return res.status(403).json({ message: 'Forbidden. Invalid or expired token.' });
   }
 };
+
+export const verifyJWT = verifyToken;

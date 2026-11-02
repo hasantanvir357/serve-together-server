@@ -1,43 +1,41 @@
 import express from 'express';
 import mongoose from 'mongoose';
-import jwt from 'jsonwebtoken';
 import Event from '../models/Event.js';
 import User from '../models/user.js';
+import { verifyToken } from './middleware/authMiddleware.js';
 
 const router = express.Router();
 
-/**
- * JWT & Session Verification Middleware
- * Accepts Bearer tokens, cookies, or body/query emails gracefully.
- */
-const verifyToken = (req, res, next) => {
-  const authHeader = req.headers.authorization;
-  const token = authHeader && authHeader.split(' ')[1];
+const normalizeEmail = (email) => String(email || '').trim().toLowerCase();
 
-  if (token) {
-    try {
-      const decoded = jwt.verify(token, process.env.JWT_SECRET || 'servetogether_jwt_secret_2026');
-      req.user = decoded;
-    } catch (error) {
-      // Invalid/expired token: fallback to payload email
-    }
+const getToday = () => {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return today;
+};
+
+const getEventIdentifier = (id) => {
+  if (mongoose.Types.ObjectId.isValid(id)) {
+    return { _id: id };
   }
 
-  if (req.user?.email) return next();
+  return { $or: [{ slug: id }, { customId: id }, { id }] };
+};
 
-  // Extract from body, headers, or query
-  const bodyEmail = req.body?.userEmail || req.body?.email || req.body?.creatorEmail || req.body?.organizerEmail;
-  const queryEmail = req.query?.userEmail || req.query?.email;
-  const email = bodyEmail || queryEmail;
+const getEventOwnerEmail = (event) => normalizeEmail(event.creatorEmail || event.organizerEmail);
 
-  if (email) {
-    req.user = { ...(req.user || {}), email: String(email).trim().toLowerCase() };
-    return next();
+const findEventForUser = async (id, userEmail) => {
+  const event = await Event.findOne(getEventIdentifier(id));
+
+  if (!event) {
+    return { event: null, status: 404 };
   }
 
-  // Allow proceeding with fallback instead of strictly breaking create event
-  req.user = { email: 'volunteer@servetogether.org' };
-  next();
+  if (getEventOwnerEmail(event) !== userEmail) {
+    return { event: null, status: 403 };
+  }
+
+  return { event, status: 200 };
 };
 
 /**
@@ -128,30 +126,44 @@ function getSeedEvent(index) {
 // PUBLIC & QUERY ROUTES
 // ==========================================
 
-// ১. GET all upcoming events (sorted by date)
-router.get('/', async (req, res) => {
+const getUpcomingEvents = async (req, res) => {
   try {
-    const events = await Event.find().sort({ date: 1, createdAt: -1 });
+    const events = await Event.find({ date: { $gte: getToday() } }).sort({ date: 1 });
+    res.status(200).json(events);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+router.get('/', getUpcomingEvents);
+router.get('/upcoming', getUpcomingEvents);
+
+router.get('/recent', async (req, res) => {
+  try {
+    const events = await Event.find({ date: { $gte: getToday() } })
+      .sort({ date: 1 })
+      .limit(6);
     res.status(200).json(events);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
-// ২. GET joined events for a user (includes seed events)
-router.get('/joined', async (req, res) => {
+export const getJoinedEvents = async (req, res) => {
   try {
-    const userEmail = (req.query.userEmail || req.query.email || req.user?.email || '').trim().toLowerCase();
+    const requestedEmail = normalizeEmail(req.query.userEmail || req.query.email);
+    const userEmail = normalizeEmail(req.user.email);
+    if (requestedEmail && requestedEmail !== userEmail) {
+      return res.status(403).json({ message: 'You can only view your own joined events.' });
+    }
     if (!userEmail) {
       return res.status(200).json([]);
     }
 
-    // Database joined events
     const dbEvents = await Event.find({
       $or: [{ volunteers: userEmail }, { joinedUsers: userEmail }],
     }).sort({ date: 1 });
 
-    // In-memory seed joined events
     const joinedSeeds = [];
     for (let i = 0; i < SEED_EVENTS.length; i++) {
       const set = seedJoinStore.get(i);
@@ -160,19 +172,21 @@ router.get('/joined', async (req, res) => {
       }
     }
 
-    res.status(200).json([...joinedSeeds, ...dbEvents]);
+    const joinedEvents = [...joinedSeeds, ...dbEvents].sort((left, right) => new Date(left.date) - new Date(right.date));
+    res.status(200).json(joinedEvents);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
-});
+};
 
-// ৩. GET user created events
-router.get('/my-events', async (req, res) => {
+router.get('/joined', verifyToken, getJoinedEvents);
+
+router.get('/my-events', verifyToken, async (req, res) => {
   try {
-    const email = (req.query.email || req.query.userEmail || '').trim().toLowerCase();
-    if (!email) {
-      const allEvents = await Event.find().sort({ createdAt: -1 });
-      return res.status(200).json(allEvents);
+    const requestedEmail = normalizeEmail(req.query.email || req.query.userEmail);
+    const email = normalizeEmail(req.user.email);
+    if (requestedEmail && requestedEmail !== email) {
+      return res.status(403).json({ message: 'You can only view your own events.' });
     }
     const events = await Event.find({
       $or: [{ organizerEmail: email }, { creatorEmail: email }],
@@ -209,15 +223,10 @@ router.get('/:id', async (req, res) => {
 // MUTATION ROUTES (Create, Update, Delete, Join, Leave)
 // ==========================================
 
-// ৫. POST Create Event
 const handleCreateEvent = async (req, res) => {
   try {
-    const { title, description, category, location, date, volunteersNeeded, imageUrl, creatorEmail, organizerEmail } =
-      req.body;
-
-    // Safely resolve creator email without runtime errors
-    const creatorEmailFinal =
-      organizerEmail || creatorEmail || req.body.userEmail || req.user?.email || 'admin@servetogether.org';
+    const { title, description, category, location, date, volunteersNeeded, imageUrl } = req.body;
+    const creatorEmail = normalizeEmail(req.user.email);
 
     if (!title || !date) {
       return res.status(400).json({ message: 'Title and date are required' });
@@ -228,9 +237,7 @@ const handleCreateEvent = async (req, res) => {
       return res.status(400).json({ message: 'Invalid event date' });
     }
 
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    if (eventDate < today) {
+    if (eventDate < getToday()) {
       return res.status(400).json({ message: 'Event date must be in the future' });
     }
 
@@ -241,8 +248,8 @@ const handleCreateEvent = async (req, res) => {
       location: location || '',
       date: eventDate,
       volunteersNeeded: Number(volunteersNeeded) || 1,
-      organizerEmail: String(creatorEmailFinal).trim().toLowerCase(),
-      creatorEmail: String(creatorEmailFinal).trim().toLowerCase(),
+      organizerEmail: creatorEmail,
+      creatorEmail,
       imageUrl: imageUrl || '',
       volunteers: [],
       joinedUsers: [],
@@ -258,25 +265,88 @@ const handleCreateEvent = async (req, res) => {
 router.post('/', verifyToken, handleCreateEvent);
 router.post('/create', verifyToken, handleCreateEvent);
 
-// ৬. DELETE Event
-router.delete('/:id', async (req, res) => {
+const handleUpdateEvent = async (req, res) => {
   try {
     const { id } = req.params;
+    const userEmail = normalizeEmail(req.user.email);
 
     if (getSeedIndex(id) !== -1) {
-      return res.status(200).json({ success: true, message: 'Seed demo event removed from view' });
+      return res.status(404).json({ message: 'Seed demo events cannot be updated' });
     }
 
-    let deletedEvent = null;
-    if (mongoose.Types.ObjectId.isValid(id)) {
-      deletedEvent = await Event.findByIdAndDelete(id);
-    } else {
-      deletedEvent = await Event.findOneAndDelete({ $or: [{ slug: id }, { customId: id }, { id: id }] });
+    const { event, status } = await findEventForUser(id, userEmail);
+    if (!event) {
+      return res
+        .status(status)
+        .json({ message: status === 403 ? 'You can only update your own events' : 'Event not found' });
     }
 
-    if (!deletedEvent) {
-      return res.status(404).json({ message: 'Event not found' });
+    const allowedFields = ['title', 'description', 'category', 'location', 'date', 'volunteersNeeded', 'imageUrl'];
+    const updates = Object.fromEntries(
+      Object.entries(req.body).filter(([field, value]) => allowedFields.includes(field) && value !== undefined)
+    );
+
+    if (Object.keys(updates).length === 0) {
+      return res.status(400).json({ message: 'At least one event field is required' });
     }
+
+    if ('date' in updates) {
+      const eventDate = new Date(updates.date);
+      if (Number.isNaN(eventDate.getTime())) {
+        return res.status(400).json({ message: 'Invalid event date' });
+      }
+      if (eventDate < getToday()) {
+        return res.status(400).json({ message: 'Event date must be in the future' });
+      }
+      updates.date = eventDate;
+    }
+
+    if ('volunteersNeeded' in updates) {
+      const volunteerCount = Number(updates.volunteersNeeded);
+      if (!Number.isFinite(volunteerCount) || volunteerCount < 1) {
+        return res.status(400).json({ message: 'Volunteers needed must be at least 1' });
+      }
+      updates.volunteersNeeded = volunteerCount;
+    }
+
+    const updatedEvent = await Event.findOneAndUpdate(
+      {
+        _id: event._id,
+        $or: [{ creatorEmail: userEmail }, { organizerEmail: userEmail }],
+      },
+      { $set: updates },
+      { new: true, runValidators: true }
+    );
+
+    if (!updatedEvent) {
+      return res.status(403).json({ message: 'You can only update your own events' });
+    }
+
+    res.status(200).json({ success: true, message: 'Event updated successfully', event: updatedEvent });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+};
+
+router.put('/:id', verifyToken, handleUpdateEvent);
+
+router.delete('/:id', verifyToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const userEmail = normalizeEmail(req.user.email);
+
+    if (getSeedIndex(id) !== -1) {
+      return res.status(404).json({ message: 'Seed demo events cannot be deleted' });
+    }
+
+    const { event, status } = await findEventForUser(id, userEmail);
+    if (!event) {
+      return res
+        .status(status)
+        .json({ message: status === 403 ? 'You can only delete your own events' : 'Event not found' });
+    }
+
+    await Event.deleteOne({ _id: event._id });
 
     res.status(200).json({ success: true, message: 'Event deleted successfully' });
   } catch (error) {
@@ -284,18 +354,15 @@ router.delete('/:id', async (req, res) => {
   }
 });
 
-// ৭. POST Leave Event
-router.post('/:id/leave', async (req, res) => {
+router.post('/:id/leave', verifyToken, async (req, res) => {
   try {
-    const userEmail = (req.body.userEmail || req.body.email || req.query.userEmail || '').trim().toLowerCase();
+    const userEmail = normalizeEmail(req.user.email);
 
     const seedIndex = getSeedIndex(req.params.id);
     if (seedIndex !== -1) {
       const emails = seedJoinStore.get(seedIndex) ?? new Set();
-      if (userEmail) {
-        emails.delete(userEmail);
-        seedJoinStore.set(seedIndex, emails);
-      }
+      emails.delete(userEmail);
+      seedJoinStore.set(seedIndex, emails);
       return res
         .status(200)
         .json({ success: true, message: 'Successfully left the event!', event: getSeedEvent(seedIndex) });
@@ -313,9 +380,7 @@ router.post('/:id/leave', async (req, res) => {
 
     if (!event) return res.status(404).json({ message: 'Event not found' });
 
-    if (userEmail) {
-      await User.findOneAndUpdate({ email: userEmail }, { $pull: { joinedEvents: event._id } }).catch(() => null);
-    }
+    await User.findOneAndUpdate({ email: userEmail }, { $pull: { joinedEvents: event._id } }).catch(() => null);
 
     res.status(200).json({ success: true, message: 'Successfully left the event!', event });
   } catch (error) {
@@ -323,15 +388,14 @@ router.post('/:id/leave', async (req, res) => {
   }
 });
 
-// ৮. POST Join Event
-router.post('/:id/join', async (req, res) => {
+router.post('/:id/join', verifyToken, async (req, res) => {
   try {
-    const userEmail = (req.body.userEmail || req.body.email || req.query.userEmail || '').trim().toLowerCase();
+    const userEmail = normalizeEmail(req.user.email);
 
     const seedIndex = getSeedIndex(req.params.id);
     if (seedIndex !== -1) {
       const emails = seedJoinStore.get(seedIndex) ?? new Set();
-      if (userEmail) emails.add(userEmail);
+      emails.add(userEmail);
       seedJoinStore.set(seedIndex, emails);
       return res
         .status(200)
@@ -350,13 +414,11 @@ router.post('/:id/join', async (req, res) => {
 
     if (!event) return res.status(404).json({ message: 'Event not found' });
 
-    if (userEmail) {
-      await User.findOneAndUpdate(
-        { email: userEmail },
-        { $addToSet: { joinedEvents: event._id } },
-        { upsert: true }
-      ).catch(() => null);
-    }
+    await User.findOneAndUpdate(
+      { email: userEmail },
+      { $addToSet: { joinedEvents: event._id } },
+      { upsert: true }
+    ).catch(() => null);
 
     res.status(200).json({ success: true, message: 'Successfully joined event!', event });
   } catch (error) {

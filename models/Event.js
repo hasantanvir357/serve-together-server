@@ -38,11 +38,19 @@ const eventSchema = new mongoose.Schema(
       lowercase: true,
       match: [/^\S+@\S+\.\S+$/, 'Organizer email must be valid'],
     },
+    creatorEmail: {
+      type: String,
+      required: [true, 'Creator email is required'],
+      trim: true,
+      lowercase: true,
+      match: [/^\S+@\S+\.\S+$/, 'Creator email must be valid'],
+    },
     imageUrl: {
       type: String,
       trim: true,
       default: '',
     },
+    volunteers: [{ type: String }],
     joinedUsers: [{ type: String }],
   },
   { timestamps: true }

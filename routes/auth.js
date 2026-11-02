@@ -68,7 +68,6 @@ router.put('/profile', async (req, res) => {
 
     const cleanEmail = email.trim().toLowerCase();
 
-    // ইউজারের নাম এবং ছবির ফিল্ড আপডেট করা
     const updatedUser = await User.findOneAndUpdate(
       { email: cleanEmail },
       {

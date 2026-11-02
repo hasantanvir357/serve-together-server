@@ -2,8 +2,9 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import { connectDB } from './db.js';
-import eventRoutes from './routes/eventRoutes.js';
+import eventRoutes, { getJoinedEvents } from './routes/eventRoutes.js';
 import authRoutes from './routes/auth.js';
+import { verifyToken } from './routes/middleware/authMiddleware.js';
 
 dotenv.config();
 
@@ -28,6 +29,7 @@ app.get('/', (req, res) => {
 
 // API Routes
 app.use('/api/events', eventRoutes);
+app.get('/api/joined-events', verifyToken, getJoinedEvents);
 app.use('/api/auth', authRoutes);
 
 async function startServer() {
