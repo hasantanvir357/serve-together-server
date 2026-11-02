@@ -6,12 +6,12 @@ const router = express.Router();
 
 /**
  * POST /api/auth/jwt-token
- * Frontend authentication (Google or Email/Password) সফল হওয়ার পর
+ * Frontend authentication (Google or Email/Password) সফল হওয়ার পর
  * ব্যাকএন্ড থেকে সুরক্ষিত JWT Token জেনারেট করার জন্য।
  */
 router.post('/jwt-token', async (req, res) => {
   try {
-    const { email, name } = req.body;
+    const { email, name, image } = req.body;
 
     if (!email) {
       return res.status(400).json({ message: 'Email is required' });
@@ -19,10 +19,16 @@ router.post('/jwt-token', async (req, res) => {
 
     const cleanEmail = email.trim().toLowerCase();
 
-    // মঙ্গোডিবিতে ইউজার না থাকলে আপডেট বা ক্রিয়েট (Upsert)
+    // মঙ্গোডিবিতে ইউজার না থাকলে তৈরি হবে, থাকলে তথ্য ঠিক থাকবে
     let user = await User.findOneAndUpdate(
       { email: cleanEmail },
-      { $setOnInsert: { email: cleanEmail, name: name || 'User' } },
+      {
+        $setOnInsert: {
+          email: cleanEmail,
+          name: name || 'User',
+          image: image || '',
+        },
+      },
       { upsert: true, new: true }
     );
 
@@ -40,10 +46,56 @@ router.post('/jwt-token', async (req, res) => {
         id: user._id,
         email: user.email,
         name: user.name,
+        image: user.image || '',
       },
     });
   } catch (error) {
     res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * PUT /api/auth/profile
+ * ইউজারের নাম ও প্রোফাইল ছবি আপডেট করার জন্য।
+ */
+router.put('/profile', async (req, res) => {
+  try {
+    const { email, name, image } = req.body;
+
+    if (!email) {
+      return res.status(400).json({ success: false, message: 'Email is required' });
+    }
+
+    const cleanEmail = email.trim().toLowerCase();
+
+    // ইউজারের নাম এবং ছবির ফিল্ড আপডেট করা
+    const updatedUser = await User.findOneAndUpdate(
+      { email: cleanEmail },
+      {
+        $set: {
+          ...(name && { name: name.trim() }),
+          ...(image !== undefined && { image: image.trim() }),
+        },
+      },
+      { new: true }
+    );
+
+    if (!updatedUser) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'Profile updated successfully',
+      user: {
+        id: updatedUser._id,
+        email: updatedUser.email,
+        name: updatedUser.name,
+        image: updatedUser.image || '',
+      },
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
   }
 });
 
